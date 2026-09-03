@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Real Signal Bot — RS</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#07111f;color:#eaf2ff;font-family:system-ui,Arial,sans-serif}
+.app{max-width:760px;margin:auto;padding:18px}.top{text-align:center;padding:18px 8px}.logo{font-size:32px;font-weight:800}.sub{color:#91a4bd}
+.card{background:#101e31;border:1px solid #20344d;border-radius:18px;padding:16px;margin:12px 0}
+h2{font-size:17px;margin:0 0 12px}label{display:block;color:#aabbd0;font-size:13px;margin:10px 0 6px}
+input,select,button{width:100%;padding:13px;border-radius:11px;border:1px solid #334a67;background:#091525;color:#fff;font-size:15px}
+button{background:#2563eb;border:0;font-weight:800;margin-top:12px;cursor:pointer}.grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.signal{font-size:30px;font-weight:900;text-align:center;padding:22px;border-radius:15px;background:#091525}.green{color:#4ade80}.red{color:#fb7185}.yellow{color:#facc15}
+.bar{height:9px;background:#24364d;border-radius:10px;overflow:hidden;margin-top:8px}.fill{height:100%;width:0;background:#60a5fa}
+ul{padding-left:20px;color:#c7d5e6}.note{font-size:12px;color:#8498b2;line-height:1.5}
+img{width:100%;max-height:380px;object-fit:contain;border-radius:12px;margin-top:10px;display:none}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="top"><div class="logo">RS — Real Signal Bot</div><div class="sub">OTC Training & Market Analysis</div></div>
+
+<div class="card">
+<h2>1. Market Setup</h2>
+<label>Market / Pair</label><input id="pair" placeholder="EUR/USD OTC">
+<label>Timeframe</label><select id="tf"><option>1 Minute</option><option>5 Minutes</option><option>15 Minutes</option></select>
+<label>Chart Screenshot</label><input id="img" type="file" accept="image/*"><img id="preview">
+</div>
+
+<div class="card">
+<h2>2. Recent Candle Data</h2>
+<div class="note">শেষ 5টি candle-এর OHLC দিলে RS-এর rule engine আরও নির্দিষ্টভাবে পরীক্ষা করতে পারবে।</div>
+<div id="candles"></div>
+<button onclick="analyze()">ANALYZE MARKET</button>
+</div>
+
+<div class="card">
+<h2>3. RS Result</h2>
+<div id="sig" class="signal yellow">NO SIGNAL</div>
+<div style="margin-top:12px">Confidence: <b id="conf">0%</b><div class="bar"><div id="fill" class="fill"></div></div></div>
+<ul id="why"><li>পর্যাপ্ত confirmation না পাওয়া পর্যন্ত RS অপেক্ষা করবে।</li></ul>
+</div>
+
+<div class="card note">
+<b>Risk notice:</b> RS কোনো 100% accurate বা guaranteed-profit system নয়। এই সংস্করণটি training/analysis-এর জন্য। Screenshot থেকে নিজে নিজে আসল live price feed পড়ছে না, এবং broker-এ অটোমেটিক trade place করে না।
+</div>
+</div>
+
+<script>
+const box=document.getElementById('candles');
+for(let i=1;i<=5;i++)box.innerHTML+=`<div class="grid" style="margin-top:9px">
+<input id="o${i}" type="number" step="any" placeholder="C${i} Open">
+<input id="h${i}" type="number" step="any" placeholder="High">
+<input id="l${i}" type="number" step="any" placeholder="Low">
+<input id="c${i}" type="number" step="any" placeholder="Close"></div>`;
+
+document.getElementById('img').onchange=e=>{
+ const f=e.target.files[0];if(!f)return;
+ const p=document.getElementById('preview');p.src=URL.createObjectURL(f);p.style.display='block';
+};
+
+function analyze(){
+ let a=[];
+ for(let i=1;i<=5;i++){
+  const o=+document.getElementById('o'+i).value,h=+document.getElementById('h'+i).value,l=+document.getElementById('l'+i).value,c=+document.getElementById('c'+i).value;
+  if([o,h,l,c].some(Number.isNaN)||h<Math.max(o,c)||l>Math.min(o,c)||h<l){alert('৫টি candle-এর OHLC সঠিকভাবে পূরণ করুন।');return}
+  a.push({o,h,l,c});
+ }
+ let s=0,w=[];
+ const bull=a.filter(x=>x.c>x.o).length,bear=a.filter(x=>x.c<x.o).length,last=a[4],prev=a[3];
+ if(bull>=4){s+=2;w.push('শেষ ৫টির মধ্যে bullish candle বেশি।')}
+ if(bear>=4){s-=2;w.push('শেষ ৫টির মধ্যে bearish candle বেশি।')}
+ if(last.c>prev.c){s+=1;w.push('শেষ close আগের close-এর ওপরে।')}
+ if(last.c<prev.c){s-=1;w.push('শেষ close আগের close-এর নিচে।')}
+ const body=Math.abs(last.c-last.o)||0.0000001,up=last.h-Math.max(last.o,last.c),down=Math.min(last.o,last.c)-last.l;
+ if(last.c>last.o&&down>body*1.5){s+=2;w.push('শেষ candle-এ নিচের rejection আছে।')}
+ if(last.c<last.o&&up>body*1.5){s-=2;w.push('শেষ candle-এ ওপরের rejection আছে।')}
+ if(a.slice(-3).every(x=>x.c>x.o)){s-=1;w.push('টানা bullish move—pullback risk আছে।')}
+ if(a.slice(-3).every(x=>x.c<x.o)){s+=1;w.push('টানা bearish move—bounce risk আছে।')}
+ let text='NO SIGNAL',cl='yellow',conf=Math.min(95,45+Math.abs(s)*10);
+ if(s>=4){text='CALL / UP';cl='green'} else if(s<=-4){text='PUT / DOWN';cl='red'} else {conf=35;w.push('Confirmation threshold পূরণ হয়নি। অপেক্ষা করুন।')}
+ const e=document.getElementById('sig');e.textContent=text;e.className='signal '+cl;
+ document.getElementById('conf').textContent=conf+'%';document.getElementById('fill').style.width=conf+'%';
+ document.getElementById('why').innerHTML=w.map(x=>'<li>'+x+'</li>').join('');
+}
+</script>
+</body></html>
